@@ -1,0 +1,9 @@
+PUT http://localhost:8080/api/patients/34407ca8-1194-479a-b5d9-ee1ac2729de0
+Content-Type: application/json
+
+{
+  "name": "JohnD",
+  "email": "john@test.com",
+  "address": "Colombo",
+  "dateOfBirth": "2000-01-01"
+}
