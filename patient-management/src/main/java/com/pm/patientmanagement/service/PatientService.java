@@ -2,67 +2,131 @@ package com.pm.patientmanagement.service;
 
 import com.pm.patientmanagement.client.BillingServiceGrpcClient;
 import com.pm.patientmanagement.dto.PatientRequestDTO;
+import com.pm.patientmanagement.dto.PatientResponseDTO;
 import com.pm.patientmanagement.exception.PatientNotFoundException;
 import com.pm.patientmanagement.exception.EmailAlreadyExistsException;
+import com.pm.patientmanagement.kafka.PatientEventProducer;
 import com.pm.patientmanagement.model.Patient;
 import com.pm.patientmanagement.repository.PatientRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
+import java.util.stream.Collectors;
 
+/**
+ * Patient service - business logic
+ */
 @Service
 public class PatientService {
 
-    private final PatientRepository patientRepository;
-    private final BillingServiceGrpcClient billingServiceGrpcClient;
+    private static final Logger logger = LoggerFactory.getLogger(PatientService.class);
 
-    public PatientService(PatientRepository patientRepository,
-                          BillingServiceGrpcClient billingServiceGrpcClient) {
-        this.patientRepository = patientRepository;
-        this.billingServiceGrpcClient = billingServiceGrpcClient;
+    @Autowired
+    private PatientRepository patientRepository;
+
+    @Autowired
+    private BillingServiceGrpcClient billingServiceGrpcClient;
+
+    @Autowired
+    private PatientEventProducer patientEventProducer;
+
+    /**
+     * Get all patients
+     */
+    @Transactional(readOnly = true)
+    public List<PatientResponseDTO> getAllPatients() {
+        logger.info("Fetching all patients");
+        return patientRepository.findAll()
+                .stream()
+                .map(this::toResponseDTO)
+                .collect(Collectors.toList());
     }
 
-    public List<Patient> getAllPatients() {
-        return patientRepository.findAll();
-    }
-
-    public Patient getPatientById(UUID id) {
-        return patientRepository.findById(id)
+    /**
+     * Get patient by ID
+     */
+    @Transactional(readOnly = true)
+    public PatientResponseDTO getPatientById(Long id) {
+        logger.info("Fetching patient: {}", id);
+        Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new PatientNotFoundException("Patient not found with id: " + id));
+        return toResponseDTO(patient);
     }
 
-    public Patient createPatient(PatientRequestDTO requestDTO) {
-        // 1. Save patient to database first
-        Patient patient = new Patient();
-        patient.setName(requestDTO.getName());
-        patient.setEmail(requestDTO.getEmail());
-        patient.setAddress(requestDTO.getAddress());
-        patient.setDateOfBirth(requestDTO.getDateOfBirth());
-        patient.setRegisteredDate(LocalDate.now());
+    /**
+     * Create new patient
+     * - Check for duplicate email
+     * - Save to database
+     * - Call billing service (gRPC)
+     * - Publish Kafka event
+     */
+    @Transactional
+    public PatientResponseDTO createPatient(PatientRequestDTO requestDTO) {
+        logger.info("Creating patient with email: {}", requestDTO.getEmail());
 
+        // 1. Check if email already exists
+        if (patientRepository.existsByEmail(requestDTO.getEmail())) {
+            throw new EmailAlreadyExistsException("Email already exists: " + requestDTO.getEmail());
+        }
+
+        // 2. Create patient entity
+        Patient patient = Patient.builder()
+                .name(requestDTO.getName())
+                .email(requestDTO.getEmail())
+                .address(requestDTO.getAddress())
+                .dateOfBirth(requestDTO.getDateOfBirth())
+                .active(true)
+                .build();
+
+        // 3. Save to database
         Patient savedPatient = patientRepository.save(patient);
+        logger.info("✅ Patient saved with ID: {}", savedPatient.getId());
 
-        // 2. Call gRPC to create billing account
+        // 4. Call gRPC billing service
         try {
-            String billingAccountId = billingServiceGrpcClient.createBillingAccount(
+            billingServiceGrpcClient.createBillingAccount(
                     savedPatient.getId().toString(),
                     savedPatient.getName(),
                     savedPatient.getEmail()
             );
-            System.out.println("Successfully created billing account: " + billingAccountId);
+            logger.info("✅ Billing account created");
         } catch (Exception e) {
-            System.err.println("Warning: Failed to create billing account, but patient was saved: " + e.getMessage());
-            // In a real system, you might want to store this in a retry queue or send to Kafka
+            logger.warn("⚠️ Billing service call failed: {}", e.getMessage());
         }
 
-        return savedPatient;
+        // 5. Publish Kafka event
+        try {
+            patientEventProducer.publishPatientCreatedEvent(
+                    savedPatient.getId(),
+                    savedPatient.getName(),
+                    savedPatient.getEmail(),
+                    savedPatient.getAddress(),
+                    savedPatient.getDateOfBirth().toString()
+            );
+            logger.info("✅ Patient event published");
+        } catch (Exception e) {
+            logger.warn("⚠️ Kafka publish failed: {}", e.getMessage());
+        }
+
+        return toResponseDTO(savedPatient);
     }
 
-    public Patient updatePatient(UUID id, PatientRequestDTO requestDTO) {
-        Patient patient = getPatientById(id);
+    /**
+     * Update patient
+     */
+    @Transactional
+    public PatientResponseDTO updatePatient(Long id, PatientRequestDTO requestDTO) {
+        logger.info("Updating patient: {}", id);
 
+        Patient patient = patientRepository.findById(id)
+                .orElseThrow(() -> new PatientNotFoundException("Patient not found with id: " + id));
+
+        // Check email uniqueness
         if (!patient.getEmail().equals(requestDTO.getEmail())
                 && patientRepository.existsByEmail(requestDTO.getEmail())) {
             throw new EmailAlreadyExistsException("Email already exists: " + requestDTO.getEmail());
@@ -73,11 +137,39 @@ public class PatientService {
         patient.setAddress(requestDTO.getAddress());
         patient.setDateOfBirth(requestDTO.getDateOfBirth());
 
-        return patientRepository.save(patient);
+        Patient updated = patientRepository.save(patient);
+        logger.info("✅ Patient updated: {}", id);
+
+        return toResponseDTO(updated);
     }
 
-    public void deletePatient(UUID id) {
-        getPatientById(id);
+    /**
+     * Delete patient
+     */
+    @Transactional
+    public void deletePatient(Long id) {
+        logger.info("Deleting patient: {}", id);
+
+        Patient patient = patientRepository.findById(id)
+                .orElseThrow(() -> new PatientNotFoundException("Patient not found with id: " + id));
+
         patientRepository.deleteById(id);
+        logger.info("✅ Patient deleted: {}", id);
+    }
+
+    /**
+     * Convert Patient entity to response DTO
+     */
+    private PatientResponseDTO toResponseDTO(Patient patient) {
+        return PatientResponseDTO.builder()
+                .id(patient.getId())
+                .name(patient.getName())
+                .email(patient.getEmail())
+                .address(patient.getAddress())
+                .dateOfBirth(patient.getDateOfBirth())
+                .createdAt(patient.getCreatedAt())
+                .updatedAt(patient.getUpdatedAt())
+                .active(patient.getActive())
+                .build();
     }
 }
