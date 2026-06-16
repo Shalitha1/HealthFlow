@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: patient_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  billing-service:
+    build:
+      context: ./billing-service
+      dockerfile: Dockerfile
+    ports:
+      - "9090:9090"
+    environment:
+      - GRPC_SERVER_PORT=9090
+    depends_on:
+      - postgres
+
+  patient-service:
+    build:
+      context: ./patient-management
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=patient_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+      - BILLING_SERVICE_HOST=billing-service
+      - BILLING_SERVICE_PORT=9090
+    depends_on:
+      - postgres
+      - billing-service
+
+volumes:
+  postgres_data:
