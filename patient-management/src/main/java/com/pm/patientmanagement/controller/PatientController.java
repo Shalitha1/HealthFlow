@@ -1,72 +1,97 @@
 package com.pm.patientmanagement.controller;
 
-import com.pm.patientmanagement.model.Patient;
+import com.pm.patientmanagement.dto.PatientRequestDTO;
+import com.pm.patientmanagement.dto.PatientResponseDTO;
 import com.pm.patientmanagement.service.PatientService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.pm.patientmanagement.dto.PatientRequestDTO;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
-
 
 import java.util.List;
-import java.util.UUID;
 
+/**
+ * Patient REST controller
+ */
 @RestController
 @RequestMapping("/api/patients")
+@CrossOrigin(origins = "*", maxAge = 3600)
 public class PatientController {
 
-    private final PatientService patientService;
+    private static final Logger logger = LoggerFactory.getLogger(PatientController.class);
 
-    public PatientController(PatientService patientService) {
-        this.patientService = patientService;
-    }
+    @Autowired
+    private PatientService patientService;
 
+    /**
+     * GET /api/patients
+     * Get all patients
+     */
     @GetMapping
-    public ResponseEntity<List<Patient>> getAllPatients() {
-
-        List<Patient> patients = patientService.getAllPatients();
-
+    public ResponseEntity<List<PatientResponseDTO>> getAllPatients() {
+        logger.info("GET /api/patients");
+        List<PatientResponseDTO> patients = patientService.getAllPatients();
         return ResponseEntity.ok(patients);
     }
 
+    /**
+     * GET /api/patients/{id}
+     * Get patient by ID
+     */
     @GetMapping("/{id}")
-    public ResponseEntity<Patient> getPatientById(@PathVariable UUID id) {
-
-        Patient patient = patientService.getPatientById(id);
-
+    public ResponseEntity<PatientResponseDTO> getPatientById(@PathVariable Long id) {
+        logger.info("GET /api/patients/{}", id);
+        PatientResponseDTO patient = patientService.getPatientById(id);
         return ResponseEntity.ok(patient);
     }
 
+    /**
+     * POST /api/patients
+     * Create new patient
+     */
     @PostMapping
-    public ResponseEntity<Patient> createPatient(
+    public ResponseEntity<PatientResponseDTO> createPatient(
             @Valid @RequestBody PatientRequestDTO requestDTO) {
-
-        Patient patient = patientService.createPatient(requestDTO);
-
+        logger.info("POST /api/patients - Creating patient: {}", requestDTO.getEmail());
+        PatientResponseDTO patient = patientService.createPatient(requestDTO);
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(patient);
     }
+
+    /**
+     * PUT /api/patients/{id}
+     * Update patient
+     */
     @PutMapping("/{id}")
-    public ResponseEntity<Patient> updatePatient(
-            @PathVariable UUID id,
+    public ResponseEntity<PatientResponseDTO> updatePatient(
+            @PathVariable Long id,
             @Valid @RequestBody PatientRequestDTO requestDTO) {
-
-        Patient patient = patientService.updatePatient(id, requestDTO);
-
+        logger.info("PUT /api/patients/{}", id);
+        PatientResponseDTO patient = patientService.updatePatient(id, requestDTO);
         return ResponseEntity.ok(patient);
     }
+
+    /**
+     * DELETE /api/patients/{id}
+     * Delete patient
+     */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deletePatient(@PathVariable UUID id) {
-
+    public ResponseEntity<Void> deletePatient(@PathVariable Long id) {
+        logger.info("DELETE /api/patients/{}", id);
         patientService.deletePatient(id);
-
         return ResponseEntity.noContent().build();
     }
-}
 
+    /**
+     * GET /api/patients/health
+     * Health check
+     */
+    @GetMapping("/health")
+    public ResponseEntity<String> health() {
+        return ResponseEntity.ok("Patient Service is healthy");
+    }
+}
