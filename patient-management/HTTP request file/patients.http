@@ -3,8 +3,8 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "name": "John",
-  "email": "john@test.com",
+  "name": "Kafka test patient",
+  "email": "john@test2.com",
   "address": "Colombo",
   "dateOfBirth": "2000-01-01"
 }
