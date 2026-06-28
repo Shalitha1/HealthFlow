@@ -1,4 +1,17 @@
 services:
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_CONSUMER_GROUP_ID=notification-service
+      - PATIENT_EVENTS_TOPIC=patient-events
+      - NOTIFICATIONS_EMAIL_ENABLED=false
+    depends_on:
+      - kafka
+
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     depends_on:
