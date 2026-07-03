@@ -1,4 +1,42 @@
 services:
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8084:8084"
+    depends_on:
+      patient-service:
+        condition: service_started
+      billing-service:
+        condition: service_started
+      audit-service:
+        condition: service_started
+
+  audit-service:
+    build:
+      context: ./audit-service
+      dockerfile: Dockerfile
+    container_name: audit-service
+    expose:
+      - "8083"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=patient_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_CONSUMER_GROUP_ID=audit-service
+      - PATIENT_EVENTS_TOPIC=patient-events
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
   notification-service:
     build:
       context: ./notification-service
@@ -11,6 +49,14 @@ services:
       - NOTIFICATIONS_EMAIL_ENABLED=false
     depends_on:
       - kafka
+
+  billing-service:
+    build:
+      context: ./billing-service
+      dockerfile: Dockerfile
+    container_name: billing-service
+    expose:
+      - "8081"
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -56,8 +102,8 @@ services:
       context: ./patient-management
       dockerfile: Dockerfile
     container_name: patient-service
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -65,11 +111,12 @@ services:
       - DB_USERNAME=admin
       - DB_PASSWORD=secret
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - BILLING_SERVICE_HOST=billing-service
-      - BILLING_SERVICE_PORT=9090
+      - BILLING_SERVICE_URL=http://billing-service:8081
     depends_on:
       postgres:
         condition: service_healthy
+      billing-service:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/patients/health"]
       interval: 20s

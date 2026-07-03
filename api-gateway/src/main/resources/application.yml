@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      routes:
+        - id: patient-service
+          uri: http://patient-service:8080
+          predicates:
+            - Path=/api/patients/**
+
+        - id: billing-service
+          uri: http://billing-service:8081
+          predicates:
+            - Path=/api/billing/**
+
+        - id: audit-service
+          uri: http://audit-service:8083
+          predicates:
+            - Path=/audit-logs/**,/audit-logs
+
+server:
+  port: 8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    gateway:
+      access: unrestricted
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    reactor.netty.http.client: INFO

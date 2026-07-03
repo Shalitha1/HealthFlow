@@ -17,7 +17,7 @@ public class PatientEventProducer {
     private static final String PATIENT_EVENTS_TOPIC = "patient-events";
 
     @Autowired
-    private KafkaTemplate<String, PatientCreatedEvent> kafkaTemplate;
+    private KafkaTemplate<String, byte[]> kafkaTemplate;
 
     /**
      * Publish patient created event
@@ -33,7 +33,7 @@ public class PatientEventProducer {
                     .setCreatedAt(System.currentTimeMillis())
                     .build();
 
-            kafkaTemplate.send(PATIENT_EVENTS_TOPIC, patientId.toString(), event);
+            kafkaTemplate.send(PATIENT_EVENTS_TOPIC, patientId.toString(), event.toByteArray());
             logger.info("Published patient created event: {}", patientId);
 
         } catch (Exception e) {
