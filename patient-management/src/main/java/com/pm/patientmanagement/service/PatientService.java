@@ -1,6 +1,6 @@
 package com.pm.patientmanagement.service;
 
-import com.pm.patientmanagement.client.BillingServiceGrpcClient;
+import com.pm.patientmanagement.client.BillingServiceClient;
 import com.pm.patientmanagement.dto.PatientRequestDTO;
 import com.pm.patientmanagement.dto.PatientResponseDTO;
 import com.pm.patientmanagement.exception.PatientNotFoundException;
@@ -30,7 +30,7 @@ public class PatientService {
     private PatientRepository patientRepository;
 
     @Autowired
-    private BillingServiceGrpcClient billingServiceGrpcClient;
+    private BillingServiceClient billingServiceClient;
 
     @Autowired
     private PatientEventProducer patientEventProducer;
@@ -62,7 +62,7 @@ public class PatientService {
      * Create new patient
      * - Check for duplicate email
      * - Save to database
-     * - Call billing service (gRPC)
+     * - Call billing service (HTTP)
      * - Publish Kafka event
      */
     @Transactional
@@ -87,9 +87,9 @@ public class PatientService {
         Patient savedPatient = patientRepository.save(patient);
         logger.info("✅ Patient saved with ID: {}", savedPatient.getId());
 
-        // 4. Call gRPC billing service
+        // 4. Call billing service
         try {
-            billingServiceGrpcClient.createBillingAccount(
+            billingServiceClient.createBillingAccount(
                     savedPatient.getId().toString(),
                     savedPatient.getName(),
                     savedPatient.getEmail()

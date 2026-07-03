@@ -36,11 +36,9 @@ spring:
       acks: 1
       retries: 3
 
-# ===== GRPC CONFIGURATION =====
-grpc:
-  billing-service:
-    host: ${BILLING_SERVICE_HOST:localhost}
-    port: ${BILLING_SERVICE_PORT:9090}
+# ===== BILLING SERVICE CONFIGURATION =====
+billing-service:
+  url: ${BILLING_SERVICE_URL:http://localhost:8081}
 
 # ===== SERVER CONFIGURATION =====
 server:
