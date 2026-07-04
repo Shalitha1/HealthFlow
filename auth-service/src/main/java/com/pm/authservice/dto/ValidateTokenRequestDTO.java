@@ -1,4 +1,3 @@
 package com.pm.authservice.dto;
 
-public class ValidateTokenRequestDTO {
-}
+public record ValidateTokenRequestDTO(String token) {}
