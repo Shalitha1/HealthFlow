@@ -14,16 +14,25 @@ spring:
           uri: http://patient-service:8080
           predicates:
             - Path=/api/patients/**
+          filters:
+            - JwtAuthenticationFilter
 
         - id: billing-service
           uri: http://billing-service:8081
           predicates:
             - Path=/api/billing/**
+          filters:
+            - JwtAuthenticationFilter
 
         - id: audit-service
           uri: http://audit-service:8083
           predicates:
             - Path=/audit-logs/**,/audit-logs
+          filters:
+            - JwtAuthenticationFilter
+
+auth-service:
+  validate-url: ${AUTH_SERVICE_VALIDATE_URL:http://auth-service:8085/auth/validate}
 
 server:
   port: 8084
