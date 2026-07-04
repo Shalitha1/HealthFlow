@@ -1,0 +1,7 @@
+
+POST http://localhost:8084/auth/validate
+Content-Type: application/json
+
+{
+  "token": "eyJhbGciOiJIUzM4NCJ9.eyJzdWIiOiIxIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzgzMTU2OTczLCJleHAiOjE3ODMxNjA1NzN9.mWxjVFX5Q4p6X50awYYnPJQzboG6Pkn8d-nBb8C-joZBmZTTshLDr04JJvKrI3ra"
+}

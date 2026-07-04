@@ -1,4 +1,3 @@
 package com.pm.authservice.dto;
 
-public class LoginResponseDTO {
-}
+public record LoginResponseDTO(String token) {}
