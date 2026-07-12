@@ -1,0 +1,115 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: patient_db
+    volumes:
+      - ./init-integration-db.sql:/docker-entrypoint-initdb.d/init-integration-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d patient_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  billing-service:
+    build:
+      context: ../billing-service
+      dockerfile: Dockerfile
+    expose:
+      - "8081"
+
+  auth-service:
+    build:
+      context: ../auth-service
+      dockerfile: Dockerfile
+    expose:
+      - "8085"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=auth_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+      - JWT_SECRET=this-is-a-very-secure-secret-key-with-at-least-32-characters
+      - JWT_EXPIRATION_MS=3600000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  patient-service:
+    build:
+      context: ../patient-management
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=patient_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - BILLING_SERVICE_URL=http://billing-service:8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+      billing-service:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  audit-service:
+    build:
+      context: ../audit-service
+      dockerfile: Dockerfile
+    expose:
+      - "8083"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=patient_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_CONSUMER_GROUP_ID=audit-service
+      - PATIENT_EVENTS_TOPIC=patient-events
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  api-gateway:
+    build:
+      context: ../api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8084"
+    depends_on:
+      patient-service:
+        condition: service_started
+      billing-service:
+        condition: service_started
+      audit-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
