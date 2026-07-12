@@ -6,6 +6,7 @@ import com.pm.authservice.dto.ValidateTokenRequestDTO;
 import com.pm.authservice.service.AuthService;
 import io.jsonwebtoken.Claims;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,11 +21,11 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponseDTO login(@RequestBody LoginRequestDTO request) {
+    public ResponseEntity<LoginResponseDTO> login(@RequestBody LoginRequestDTO request) {
         try {
-            return authService.login(request.email(), request.password());
+            return ResponseEntity.ok(authService.login(request.email(), request.password()));
         } catch (BadCredentialsException ex) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }
 
