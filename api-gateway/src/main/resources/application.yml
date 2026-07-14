@@ -45,10 +45,6 @@ management:
   endpoint:
     gateway:
       access: unrestricted
-    health:
-      probes:
-        enabled: true
-      show-details: never
 
 logging:
   level:
