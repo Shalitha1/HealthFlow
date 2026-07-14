@@ -14,6 +14,10 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: false
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
 server:
   port: 8085
 
@@ -26,3 +30,14 @@ springdoc:
     path: /auth/v3/api-docs
   swagger-ui:
     path: /auth/swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
