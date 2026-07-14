@@ -1,0 +1,13 @@
+**/.terraform/*
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/crash.log
+**/crash.*.log
+**/.env
+**/localstack_providers_override.tf
+**/AWSCLIV2.pkg
+**/.DS_Store
+
+LOCALSTACK_AUTH_TOKEN=your-private-token
+LOCALSTACK_DEBUG=0

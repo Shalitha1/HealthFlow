@@ -17,3 +17,14 @@ app:
 notifications:
   email:
     enabled: ${NOTIFICATIONS_EMAIL_ENABLED:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
