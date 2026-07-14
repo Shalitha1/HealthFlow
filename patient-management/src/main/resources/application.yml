@@ -27,10 +27,6 @@ spring:
         order_inserts: true
         order_updates: true
 
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-
   # ===== KAFKA CONFIGURATION =====
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -58,9 +54,7 @@ management:
         include: health,info,metrics
   endpoint:
     health:
-      probes:
-        enabled: true
-      show-details: never
+      show-details: always
 
 # ===== LOGGING CONFIGURATION =====
 logging:
