@@ -1,8 +1,10 @@
 package com.pm.patientmanagement.exception;
 
-public class PatientNotFoundException extends RuntimeException {
+import org.springframework.http.HttpStatus;
+
+public class PatientNotFoundException extends ApiException {
 
     public PatientNotFoundException(String message) {
-        super(message);
+        super(HttpStatus.NOT_FOUND, "PATIENT_NOT_FOUND", message);
     }
 }

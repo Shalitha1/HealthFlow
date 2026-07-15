@@ -1,5 +1,24 @@
 services:
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8084
+    container_name: healthflow-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   auth-service:
     build:
       context: ./auth-service
@@ -14,10 +33,17 @@ services:
       - DB_USERNAME=admin
       - DB_PASSWORD=secret
       - JWT_SECRET=this-is-a-very-secure-secret-key-with-at-least-32-characters
-      - JWT_EXPIRATION_MS=3600000
+      - JWT_EXPIRATION_MS=900000
+      - SPRING_PROFILES_ACTIVE=dev
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   api-gateway:
     build:
@@ -26,15 +52,23 @@ services:
     container_name: api-gateway
     ports:
       - "8084:8084"
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:3000
     depends_on:
       patient-service:
-        condition: service_started
+        condition: service_healthy
       billing-service:
-        condition: service_started
+        condition: service_healthy
       audit-service:
-        condition: service_started
+        condition: service_healthy
       auth-service:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   audit-service:
     build:
@@ -46,7 +80,7 @@ services:
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=patient_db
+      - DB_NAME=audit_db
       - DB_USERNAME=admin
       - DB_PASSWORD=secret
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -57,19 +91,41 @@ services:
         condition: service_healthy
       kafka:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   notification-service:
     build:
       context: ./notification-service
       dockerfile: Dockerfile
     container_name: notification-service
+    expose:
+      - "8082"
     environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=notification_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_CONSUMER_GROUP_ID=notification-service
       - PATIENT_EVENTS_TOPIC=patient-events
       - NOTIFICATIONS_EMAIL_ENABLED=false
     depends_on:
-      - kafka
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   billing-service:
     build:
@@ -78,6 +134,21 @@ services:
     container_name: billing-service
     expose:
       - "8081"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=billing_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -111,8 +182,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-patient-db.sql:/docker-entrypoint-initdb.d/init-patient-db.sql
-      - ./init-auth-db.sql:/docker-entrypoint-initdb.d/init-auth-db.sql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d patient_db"]
       interval: 10s
@@ -140,10 +210,11 @@ services:
       billing-service:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/patients/health"]
-      interval: 20s
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres_data:

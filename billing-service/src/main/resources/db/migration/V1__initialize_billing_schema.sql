@@ -1,0 +1,2 @@
+-- Billing persistence is not implemented yet. This migration establishes
+-- billing_db ownership and Flyway history for future billing tables.

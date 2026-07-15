@@ -1,0 +1,2 @@
+-- Notification persistence is not implemented yet. This migration establishes
+-- notification_db ownership and Flyway history for future notification tables.

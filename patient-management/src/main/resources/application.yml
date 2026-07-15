@@ -27,6 +27,12 @@ spring:
         order_inserts: true
         order_updates: true
 
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+    baseline-on-migrate: false
+
   # ===== KAFKA CONFIGURATION =====
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -48,13 +54,22 @@ server:
 
 # ===== ACTUATOR CONFIGURATION =====
 management:
+  info:
+    env:
+      enabled: true
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: never
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: HealthFlow patient service
+    version: 0.0.1-SNAPSHOT
 
 # ===== LOGGING CONFIGURATION =====
 logging:
