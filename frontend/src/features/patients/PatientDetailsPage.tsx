@@ -2,17 +2,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CalendarDays, Cake, Mail, MapPin, Pencil, ReceiptText, UserRoundCheck, UserRoundX } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { patientApi } from '../../api/patientApi'
+import { billingApi } from '../../api/billingApi'
+import { useAuth } from '../../auth/AuthProvider'
 import { ErrorState } from '../../components/feedback/ErrorState'
 import { LoadingState } from '../../components/feedback/LoadingState'
 import { StatusBadge } from '../../components/feedback/StatusBadge'
 import { PageHeader } from '../../components/layout/PageHeader'
-import { formatDate, formatDateTime } from '../../utils/format'
+import { formatCurrency, formatDate, formatDateTime } from '../../utils/format'
 
 export function PatientDetailsPage() {
   const { id } = useParams()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const patient = useQuery({ queryKey: ['patient', id], queryFn: () => patientApi.get(id!) })
+  const canViewBilling = user?.role === 'ADMIN' || user?.role === 'RECEPTIONIST'
+  const billing = useQuery({ queryKey: ['patient-billing', id], queryFn: () => billingApi.patient(id!), enabled: canViewBilling })
   const statusMutation = useMutation({
     mutationFn: (active: boolean) => patientApi.updateStatus(id!, active),
     onSuccess: (updated) => {
@@ -58,7 +63,8 @@ export function PatientDetailsPage() {
         </section>
 
         <div className="space-y-6">
-          {[{ title: 'Future appointments', description: 'Upcoming visits and care schedules will appear when the Appointment Service is connected.', icon: CalendarDays, color: 'bg-violet-50 text-violet-700' }, { title: 'Billing overview', description: 'Balances, claims, and billing activity will appear when billing read APIs are available.', icon: ReceiptText, color: 'bg-amber-50 text-amber-700' }].map((section) => { const Icon = section.icon; return <section key={section.title} className="rounded-2xl border border-slate-200/80 bg-white p-5"><div className={`grid h-10 w-10 place-items-center rounded-xl ${section.color}`}><Icon className="h-5 w-5" /></div><h2 className="mt-4 font-bold text-slate-950">{section.title}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{section.description}</p><div className="mt-5 rounded-xl border border-dashed border-slate-200 py-5 text-center text-xs font-medium text-slate-400">No connected data yet</div></section> })}
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-violet-50 text-violet-700"><CalendarDays className="h-5 w-5" /></div><h2 className="mt-4 font-bold text-slate-950">Future appointments</h2><p className="mt-2 text-sm leading-6 text-slate-500">Open the appointment calendar to review upcoming care schedules.</p><Link to={`/appointments?patientId=${record.id}`} className="mt-5 inline-flex text-sm font-bold text-violet-700">View appointments</Link></section>
+          {canViewBilling && <section className="rounded-2xl border border-slate-200/80 bg-white p-5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700"><ReceiptText className="h-5 w-5" /></div><div className="mt-4 flex items-center justify-between"><h2 className="font-bold text-slate-950">Billing overview</h2>{billing.data && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{billing.data.account.status}</span>}</div>{billing.isLoading ? <p className="mt-3 text-sm text-slate-500">Loading billing account…</p> : billing.data ? <><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Total billed</p><p className="mt-1 text-sm font-bold">{formatCurrency(billing.data.totalBilled)}</p></div><div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-700">Outstanding</p><p className="mt-1 text-sm font-bold text-amber-800">{formatCurrency(billing.data.outstandingBalance)}</p></div></div><Link to={`/billing/accounts/patient/${record.id}`} className="mt-5 inline-flex text-sm font-bold text-sky-700">Open billing account</Link></> : <p className="mt-3 text-sm leading-6 text-slate-500">No persisted billing account exists for this earlier patient record. Creating an invoice will initialize it.</p>}</section>}
         </div>
       </div>
     </div>

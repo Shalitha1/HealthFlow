@@ -116,3 +116,74 @@ export interface AuditEvent {
 export interface ServiceHealth {
   status: string
 }
+
+export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED'
+
+export interface BillingAccount {
+  id: string
+  patientId: string
+  status: 'ACTIVE' | 'CLOSED'
+  createdAt: string
+}
+
+export interface InvoiceItem {
+  id: number
+  description: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+}
+
+export interface Payment {
+  id: number
+  amount: number
+  paymentMethod: string
+  paidAt: string
+  reference: string | null
+}
+
+export interface Invoice {
+  id: number
+  billingAccountId: string
+  patientId: string
+  appointmentId: number | null
+  invoiceNumber: string
+  totalAmount: number
+  paidAmount: number
+  balance: number
+  status: InvoiceStatus
+  dueDate: string
+  createdAt: string
+  items: InvoiceItem[]
+  payments: Payment[]
+}
+
+export interface PatientBilling {
+  account: BillingAccount
+  totalBilled: number
+  totalPaid: number
+  outstandingBalance: number
+  invoices: Invoice[]
+}
+
+export interface CreateInvoiceInput {
+  billingAccountId: string
+  appointmentId?: number
+  dueDate: string
+  status: 'DRAFT' | 'ISSUED'
+  items: Array<{ description: string; quantity: number; unitPrice: number }>
+}
+
+export interface PaymentInput {
+  amount: number
+  paymentMethod: string
+  reference?: string
+}
+
+export interface BillingStatistics {
+  totalInvoices: number
+  outstandingInvoices: number
+  overdueInvoices: number
+  outstandingBalance: number
+  paymentsReceived: number
+}

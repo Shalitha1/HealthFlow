@@ -89,6 +89,7 @@ services:
       - KAFKA_CONSUMER_GROUP_ID=audit-service
       - PATIENT_EVENTS_TOPIC=patient-events
       - APPOINTMENT_EVENTS_TOPIC=appointment-events
+      - BILLING_EVENTS_TOPIC=billing-events
     depends_on:
       postgres:
         condition: service_healthy
@@ -144,9 +145,13 @@ services:
       - DB_NAME=billing_db
       - DB_USERNAME=admin
       - DB_PASSWORD=secret
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - BILLING_EVENTS_TOPIC=billing-events
     depends_on:
       postgres:
         condition: service_healthy
+      kafka:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
       interval: 15s
