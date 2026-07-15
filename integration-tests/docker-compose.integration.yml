@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: patient_db
     volumes:
-      - ./init-integration-db.sql:/docker-entrypoint-initdb.d/init-integration-db.sql
+      - ../docker/postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d patient_db"]
       interval: 5s
@@ -36,6 +36,21 @@ services:
       dockerfile: Dockerfile
     expose:
       - "8081"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=billing_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   auth-service:
     build:
@@ -50,10 +65,17 @@ services:
       - DB_USERNAME=admin
       - DB_PASSWORD=secret
       - JWT_SECRET=this-is-a-very-secure-secret-key-with-at-least-32-characters
-      - JWT_EXPIRATION_MS=3600000
+      - JWT_EXPIRATION_MS=900000
+      - SPRING_PROFILES_ACTIVE=dev
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   patient-service:
     build:
@@ -76,6 +98,12 @@ services:
         condition: service_started
       kafka:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   audit-service:
     build:
@@ -86,7 +114,7 @@ services:
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=patient_db
+      - DB_NAME=audit_db
       - DB_USERNAME=admin
       - DB_PASSWORD=secret
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -97,6 +125,12 @@ services:
         condition: service_healthy
       kafka:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   api-gateway:
     build:
@@ -104,12 +138,20 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8084"
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:3000
     depends_on:
       patient-service:
-        condition: service_started
+        condition: service_healthy
       billing-service:
-        condition: service_started
+        condition: service_healthy
       audit-service:
-        condition: service_started
+        condition: service_healthy
       auth-service:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8084/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s

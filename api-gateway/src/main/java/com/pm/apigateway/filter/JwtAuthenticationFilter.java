@@ -1,6 +1,7 @@
 package com.pm.apigateway.filter;
 
 import com.pm.apigateway.exception.AuthException;
+import com.pm.apigateway.exception.ForbiddenException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
@@ -11,6 +12,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAuthenticationFilter.Config> {
@@ -46,18 +50,47 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                     .onStatus(HttpStatusCode::isError, response ->
                             Mono.error(new AuthException("Invalid or expired token")))
                     .bodyToMono(Map.class)
-                    .flatMap(claims -> chain.filter(exchange.mutate()
+                    .flatMap(claims -> {
+                        String role = String.valueOf(claims.get("role"));
+                        Set<String> allowedRoles = config.getAllowedRoleSet();
+
+                        if (!allowedRoles.isEmpty() && !allowedRoles.contains(role)) {
+                            throw new ForbiddenException("Your role is not allowed to perform this operation");
+                        }
+
+                        return chain.filter(exchange.mutate()
                             .request(exchange.getRequest().mutate()
                                     .header("X-User-Id", String.valueOf(claims.get("sub")))
-                                    .header("X-User-Role", String.valueOf(claims.get("role")))
+                                    .header("X-User-Role", role)
                                     .build())
-                            .build()))
-                    .onErrorMap(ex -> ex instanceof AuthException
+                            .build());
+                    })
+                    .onErrorMap(ex -> ex instanceof AuthException || ex instanceof ForbiddenException
                             ? ex
                             : new AuthException("Token validation failed"));
         };
     }
 
     public static class Config {
+        private String allowedRoles;
+
+        public String getAllowedRoles() {
+            return allowedRoles;
+        }
+
+        public void setAllowedRoles(String allowedRoles) {
+            this.allowedRoles = allowedRoles;
+        }
+
+        Set<String> getAllowedRoleSet() {
+            if (allowedRoles == null || allowedRoles.isBlank()) {
+                return Set.of();
+            }
+
+            return Arrays.stream(allowedRoles.split(","))
+                    .map(String::trim)
+                    .filter(role -> !role.isEmpty())
+                    .collect(Collectors.toUnmodifiableSet());
+        }
     }
 }

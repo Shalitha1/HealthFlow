@@ -15,6 +15,8 @@ import java.util.List;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -27,7 +29,11 @@ class GatewayIntegrationIT {
 
     @BeforeAll
     static void configureRestAssured() {
-        runDockerCompose("up", "-d", "--build", "--wait");
+        if (Boolean.parseBoolean(System.getenv().getOrDefault("PM_INTEGRATION_SKIP_BUILD", "false"))) {
+            runDockerCompose("up", "-d", "--wait");
+        } else {
+            runDockerCompose("up", "-d", "--build", "--wait");
+        }
 
         RestAssured.baseURI = "http://127.0.0.1";
         RestAssured.port = getPublishedGatewayPort();
@@ -70,7 +76,170 @@ class GatewayIntegrationIT {
         .when()
                 .post("/auth/login")
         .then()
-                .statusCode(401);
+                .statusCode(401)
+                .body("timestamp", notNullValue())
+                .body("status", equalTo(401))
+                .body("errorCode", equalTo("AUTH_INVALID_CREDENTIALS"))
+                .body("message", equalTo("Invalid email or password"))
+                .body("path", equalTo("/auth/login"))
+                .body("fieldErrors", notNullValue());
+    }
+
+    @Test
+    void validateWithValidTokenReturnsJwtClaims() {
+        String token = loginAndGetToken();
+
+        given()
+                .contentType("application/json")
+                .body("""
+                        {
+                          "token": "%s"
+                        }
+                        """.formatted(token))
+        .when()
+                .post("/auth/validate")
+        .then()
+                .statusCode(200)
+                .body("sub", notNullValue())
+                .body("role", equalTo("ADMIN"));
+    }
+
+    @Test
+    void validateWithInvalidTokenReturnsUnauthorized() {
+        given()
+                .contentType("application/json")
+                .body("""
+                        {
+                          "token": "not-a-valid-jwt"
+                        }
+                        """)
+        .when()
+                .post("/auth/validate")
+        .then()
+                .statusCode(401)
+                .body("status", equalTo(401))
+                .body("errorCode", equalTo("AUTH_401"))
+                .body("path", equalTo("/auth/validate"));
+    }
+
+    @Test
+    void getCurrentUserReturnsAuthenticatedUser() {
+        String token = loginAndGetToken();
+
+        given()
+                .header("Authorization", "Bearer " + token)
+        .when()
+                .get("/auth/me")
+        .then()
+                .statusCode(200)
+                .body("userId", notNullValue())
+                .body("email", equalTo(ADMIN_EMAIL))
+                .body("role", equalTo("ADMIN"));
+    }
+
+    @Test
+    void getCurrentUserWithoutTokenReturnsUnauthorized() {
+        given()
+        .when()
+                .get("/auth/me")
+        .then()
+                .statusCode(401)
+                .body("errorCode", equalTo("AUTH_UNAUTHORIZED"))
+                .body("path", equalTo("/auth/me"));
+    }
+
+    @Test
+    void getCurrentUserWithInvalidTokenReturnsUnauthorized() {
+        given()
+                .header("Authorization", "Bearer not-a-valid-jwt")
+        .when()
+                .get("/auth/me")
+        .then()
+                .statusCode(401)
+                .body("errorCode", equalTo("AUTH_UNAUTHORIZED"))
+                .body("message", equalTo("Invalid or expired token"))
+                .body("path", equalTo("/auth/me"));
+    }
+
+    @Test
+    void doctorRoleCannotReadAdminOnlyAuditLogs() {
+        String doctorToken = loginAndGetToken("doctor@pm.com", ADMIN_PASSWORD);
+
+        given()
+                .header("Authorization", "Bearer " + doctorToken)
+        .when()
+                .get("/audit-logs")
+        .then()
+                .statusCode(403)
+                .body("status", equalTo(403))
+                .body("errorCode", equalTo("AUTH_FORBIDDEN"))
+                .body("message", equalTo("Your role is not allowed to perform this operation"))
+                .body("path", equalTo("/audit-logs"));
+    }
+
+    @Test
+    void gatewayHealthAndInfoEndpointsAreAvailable() {
+        given()
+        .when()
+                .get("/actuator/health")
+        .then()
+                .statusCode(200)
+                .body("status", equalTo("UP"));
+
+        given()
+        .when()
+                .get("/actuator/info")
+        .then()
+                .statusCode(200)
+                .body("app.name", equalTo("api-gateway"))
+                .body("app.version", equalTo("0.0.1-SNAPSHOT"));
+    }
+
+    @Test
+    void publicOpenApiDocumentsAreAvailableThroughGateway() {
+        for (String endpoint : List.of("auth", "patient", "billing", "audit")) {
+            given()
+            .when()
+                    .get("/openapi/" + endpoint)
+            .then()
+                    .statusCode(200)
+                    .body("openapi", notNullValue())
+                    .body("paths", notNullValue());
+        }
+    }
+
+    @Test
+    void gatewayHandlesFrontendCorsPreflight() {
+        given()
+                .header("Origin", "http://localhost:3000")
+                .header("Access-Control-Request-Method", "GET")
+        .when()
+                .options("/api/patients")
+        .then()
+                .statusCode(200)
+                .header("Access-Control-Allow-Origin", "http://localhost:3000")
+                .header("Access-Control-Allow-Credentials", "true");
+    }
+
+    @Test
+    void invalidPatientRequestReturnsFieldErrorsInStandardFormat() {
+        String token = loginAndGetToken();
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body("{}")
+        .when()
+                .post("/api/patients")
+        .then()
+                .statusCode(400)
+                .body("status", equalTo(400))
+                .body("errorCode", equalTo("VALIDATION_FAILED"))
+                .body("path", equalTo("/api/patients"))
+                .body("fieldErrors", hasKey("name"))
+                .body("fieldErrors", hasKey("email"))
+                .body("fieldErrors", hasKey("address"))
+                .body("fieldErrors", hasKey("dateOfBirth"));
     }
 
     @Test
@@ -79,12 +248,150 @@ class GatewayIntegrationIT {
 
         given()
                 .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body("""
+                        {
+                          "name": "Integration Patient",
+                          "email": "integration.patient@example.com",
+                          "address": "Integration Test Address",
+                          "dateOfBirth": "1990-01-01"
+                        }
+                        """)
+        .when()
+                .post("/api/patients")
+        .then()
+                .statusCode(201)
+                .body("email", equalTo("integration.patient@example.com"));
+
+        given()
+                .header("Authorization", "Bearer " + token)
         .when()
                 .get("/api/patients")
         .then()
                 .statusCode(200)
-                .body("size()", greaterThanOrEqualTo(1))
-                .body("[0].email", equalTo("integration.patient@example.com"));
+                .body("patients.size()", greaterThanOrEqualTo(1))
+                .body("patients.email", hasItem("integration.patient@example.com"))
+                .body("currentPage", equalTo(0))
+                .body("pageSize", equalTo(20))
+                .body("totalElements", greaterThanOrEqualTo(1));
+    }
+
+    @Test
+    void patientPaginationSearchFilteringSoftDeletionAndStatisticsWork() {
+        String token = loginAndGetToken();
+        long johnId = createPatient(
+                token,
+                "John Milestone Four",
+                "john.milestone4@example.com"
+        );
+        long janeId = createPatient(
+                token,
+                "Jane Milestone Four",
+                "jane.milestone4@example.com"
+        );
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .queryParam("page", 0)
+                .queryParam("size", 1)
+        .when()
+                .get("/api/patients")
+        .then()
+                .statusCode(200)
+                .body("patients.size()", equalTo(1))
+                .body("currentPage", equalTo(0))
+                .body("pageSize", equalTo(1))
+                .body("totalElements", greaterThanOrEqualTo(2))
+                .body("totalPages", greaterThanOrEqualTo(2));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .queryParam("search", "John Milestone")
+        .when()
+                .get("/api/patients")
+        .then()
+                .statusCode(200)
+                .body("totalElements", equalTo(1))
+                .body("patients[0].id", equalTo((int) johnId))
+                .body("patients[0].name", equalTo("John Milestone Four"));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .queryParam("search", "jane.milestone4@example.com")
+        .when()
+                .get("/api/patients")
+        .then()
+                .statusCode(200)
+                .body("totalElements", equalTo(1))
+                .body("patients[0].id", equalTo((int) janeId));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .queryParam("search", johnId)
+        .when()
+                .get("/api/patients")
+        .then()
+                .statusCode(200)
+                .body("totalElements", equalTo(1))
+                .body("patients[0].id", equalTo((int) johnId));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body("{\"active\": false}")
+        .when()
+                .patch("/api/patients/" + johnId + "/status")
+        .then()
+                .statusCode(200)
+                .body("active", equalTo(false));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .queryParam("search", johnId)
+                .queryParam("active", false)
+        .when()
+                .get("/api/patients")
+        .then()
+                .statusCode(200)
+                .body("totalElements", equalTo(1))
+                .body("patients[0].active", equalTo(false));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .queryParam("search", johnId)
+                .queryParam("active", true)
+        .when()
+                .get("/api/patients")
+        .then()
+                .statusCode(200)
+                .body("totalElements", equalTo(0))
+                .body("patients.size()", equalTo(0));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+        .when()
+                .delete("/api/patients/" + janeId)
+        .then()
+                .statusCode(204);
+
+        given()
+                .header("Authorization", "Bearer " + token)
+        .when()
+                .get("/api/patients/" + janeId)
+        .then()
+                .statusCode(200)
+                .body("id", equalTo((int) janeId))
+                .body("active", equalTo(false));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+        .when()
+                .get("/api/patients/statistics")
+        .then()
+                .statusCode(200)
+                .body("totalPatients", greaterThanOrEqualTo(2))
+                .body("inactivePatients", greaterThanOrEqualTo(2))
+                .body("registrationsThisMonth", greaterThanOrEqualTo(2));
     }
 
     @Test
@@ -94,11 +401,19 @@ class GatewayIntegrationIT {
                 .get("/api/patients")
         .then()
                 .statusCode(401)
+                .body("timestamp", notNullValue())
                 .body("status", equalTo(401))
-                .body("message", equalTo("Missing or invalid Authorization header"));
+                .body("errorCode", equalTo("AUTH_UNAUTHORIZED"))
+                .body("message", equalTo("Missing or invalid Authorization header"))
+                .body("path", equalTo("/api/patients"))
+                .body("fieldErrors", notNullValue());
     }
 
     private String loginAndGetToken() {
+        return loginAndGetToken(ADMIN_EMAIL, ADMIN_PASSWORD);
+    }
+
+    private String loginAndGetToken(String email, String password) {
         return given()
                 .contentType("application/json")
                 .body("""
@@ -106,13 +421,34 @@ class GatewayIntegrationIT {
                           "email": "%s",
                           "password": "%s"
                         }
-                        """.formatted(ADMIN_EMAIL, ADMIN_PASSWORD))
+                        """.formatted(email, password))
         .when()
                 .post("/auth/login")
         .then()
                 .statusCode(200)
                 .extract()
                 .path("token");
+    }
+
+    private long createPatient(String token, String name, String email) {
+        return given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body("""
+                        {
+                          "name": "%s",
+                          "email": "%s",
+                          "address": "Milestone Four Test Address",
+                          "dateOfBirth": "1990-01-01"
+                        }
+                        """.formatted(name, email))
+        .when()
+                .post("/api/patients")
+        .then()
+                .statusCode(201)
+                .extract()
+                .jsonPath()
+                .getLong("id");
     }
 
     private static int getPublishedGatewayPort() {

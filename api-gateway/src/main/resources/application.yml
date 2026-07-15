@@ -4,32 +4,139 @@ spring:
 
   cloud:
     gateway:
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - ${FRONTEND_ORIGIN:http://localhost:3000}
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - Authorization
+              - Content-Type
+              - Accept
+              - Origin
+            exposedHeaders:
+              - Location
+            allowCredentials: true
+            maxAge: 3600
+
       routes:
-        - id: auth-service
+        - id: auth-openapi
           uri: http://auth-service:8085
           predicates:
-            - Path=/auth/**
+            - Path=/openapi/auth
+          filters:
+            - SetPath=/v3/api-docs
 
-        - id: patient-service
+        - id: patient-openapi
+          uri: http://patient-service:8080
+          predicates:
+            - Path=/openapi/patient
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: billing-openapi
+          uri: http://billing-service:8081
+          predicates:
+            - Path=/openapi/billing
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: audit-openapi
+          uri: http://audit-service:8083
+          predicates:
+            - Path=/openapi/audit
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: auth-current-user
+          uri: http://auth-service:8085
+          predicates:
+            - Path=/auth/me
+            - Method=GET
+          filters:
+            - JwtAuthenticationFilter
+
+        - id: auth-public
+          uri: http://auth-service:8085
+          predicates:
+            - Path=/auth/login,/auth/register,/auth/validate
+            - Method=POST
+
+        - id: patient-statistics
+          uri: http://patient-service:8080
+          predicates:
+            - Path=/api/patients/statistics
+            - Method=GET
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST
+
+        - id: patient-list
+          uri: http://patient-service:8080
+          predicates:
+            - Path=/api/patients
+            - Method=GET
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST
+
+        - id: patient-detail
+          uri: http://patient-service:8080
+          predicates:
+            - Path=/api/patients/*
+            - Method=GET
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST,DOCTOR
+
+        - id: patient-write
           uri: http://patient-service:8080
           predicates:
             - Path=/api/patients/**
+            - Method=POST,PUT,PATCH
           filters:
-            - JwtAuthenticationFilter
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST
+
+        - id: patient-delete
+          uri: http://patient-service:8080
+          predicates:
+            - Path=/api/patients/**
+            - Method=DELETE
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN
 
         - id: billing-service
           uri: http://billing-service:8081
           predicates:
             - Path=/api/billing/**
           filters:
-            - JwtAuthenticationFilter
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST
 
         - id: audit-service
           uri: http://audit-service:8083
           predicates:
             - Path=/audit-logs/**,/audit-logs
           filters:
-            - JwtAuthenticationFilter
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN
 
 auth-service:
   validate-url: ${AUTH_SERVICE_VALIDATE_URL:http://auth-service:8085/auth/validate}
@@ -38,6 +145,9 @@ server:
   port: 8084
 
 management:
+  info:
+    env:
+      enabled: true
   endpoints:
     web:
       exposure:
@@ -45,6 +155,12 @@ management:
   endpoint:
     gateway:
       access: unrestricted
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: HealthFlow API Gateway
+    version: 0.0.1-SNAPSHOT
 
 logging:
   level:

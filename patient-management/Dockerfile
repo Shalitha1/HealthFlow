@@ -8,7 +8,6 @@ WORKDIR /app
 # This is a cache optimisation — if pom.xml hasn't changed, Docker reuses
 # this layer and skips the slow dependency download on every rebuild
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
 
 # Now copy source code and build the jar
 COPY src ./src
@@ -18,6 +17,8 @@ RUN mvn clean package -DskipTests -B
 # Use a smaller JRE-only image for the final container — no Maven, no source
 # eclipse-temurin:21-jre-alpine is ~200MB vs the build image at ~700MB
 FROM eclipse-temurin:21-jre-alpine
+
+RUN apk add --no-cache curl
 
 WORKDIR /app
 
