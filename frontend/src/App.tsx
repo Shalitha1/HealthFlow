@@ -4,6 +4,10 @@ import { AppLayout } from './components/layout/AppLayout'
 import { AuditPage } from './features/audit/AuditPage'
 import { LoginPage } from './features/auth/LoginPage'
 import { SignUpPage } from './features/auth/SignUpPage'
+import { AppointmentDetailsPage } from './features/appointments/AppointmentDetailsPage'
+import { AppointmentFormPage } from './features/appointments/AppointmentFormPage'
+import { AppointmentListPage } from './features/appointments/AppointmentListPage'
+import { DoctorSchedulePage } from './features/appointments/DoctorSchedulePage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { PatientDetailsPage } from './features/patients/PatientDetailsPage'
 import { PatientFormPage } from './features/patients/PatientFormPage'
@@ -24,10 +28,16 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="forbidden" element={<ForbiddenPage />} />
-          <Route path="appointments" element={<ComingSoonPage title="Appointments" description="Scheduling, calendars, and care-team coordination will live here." />} />
+          <Route path="appointments" element={<AppointmentListPage />} />
+          <Route path="appointments/:id" element={<AppointmentDetailsPage />} />
+          <Route element={<ProtectedRoute allowedRoles={['DOCTOR']} />}>
+            <Route path="appointments/my-schedule" element={<DoctorSchedulePage />} />
+          </Route>
           <Route path="notifications" element={<ComingSoonPage title="Notifications" description="Delivery history and communication preferences will live here." />} />
 
           <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'RECEPTIONIST']} />}>
+            <Route path="appointments/new" element={<AppointmentFormPage />} />
+            <Route path="appointments/:id/edit" element={<AppointmentFormPage />} />
             <Route path="patients" element={<PatientListPage />} />
             <Route path="patients/new" element={<PatientFormPage />} />
             <Route path="patients/:id/edit" element={<PatientFormPage />} />

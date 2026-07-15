@@ -49,6 +49,13 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
+        - id: appointment-openapi
+          uri: http://appointment-service:8086
+          predicates:
+            - Path=/openapi/appointment
+          filters:
+            - SetPath=/v3/api-docs
+
         - id: audit-openapi
           uri: http://audit-service:8083
           predicates:
@@ -119,6 +126,46 @@ spring:
             - name: JwtAuthenticationFilter
               args:
                 allowedRoles: ADMIN
+
+        - id: appointment-read
+          uri: http://appointment-service:8086
+          predicates:
+            - Path=/api/appointments,/api/appointments/*
+            - Method=GET
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST,DOCTOR
+
+        - id: appointment-create-update
+          uri: http://appointment-service:8086
+          predicates:
+            - Path=/api/appointments,/api/appointments/*
+            - Method=POST,PUT
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST
+
+        - id: appointment-status
+          uri: http://appointment-service:8086
+          predicates:
+            - Path=/api/appointments/*/status
+            - Method=PATCH
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST,DOCTOR
+
+        - id: appointment-cancel
+          uri: http://appointment-service:8086
+          predicates:
+            - Path=/api/appointments/*
+            - Method=DELETE
+          filters:
+            - name: JwtAuthenticationFilter
+              args:
+                allowedRoles: ADMIN,RECEPTIONIST
 
         - id: billing-service
           uri: http://billing-service:8081

@@ -69,6 +69,42 @@ export interface PatientStatistics {
   registrationsThisMonth: number
 }
 
+export type AppointmentStatus =
+  | 'SCHEDULED'
+  | 'CONFIRMED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'NO_SHOW'
+
+export interface Appointment {
+  id: number
+  patientId: number
+  doctorId: number
+  appointmentDateTime: string
+  durationMinutes: number
+  reason: string
+  status: AppointmentStatus
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AppointmentInput {
+  patientId: number
+  doctorId: number
+  appointmentDateTime: string
+  durationMinutes: number
+  reason: string
+  notes?: string
+}
+
+export interface AppointmentListParams {
+  date?: string
+  patientId?: number
+  doctorId?: number
+  status?: AppointmentStatus
+}
+
 export interface AuditEvent {
   id: number
   eventType: string

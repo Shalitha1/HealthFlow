@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static io.restassured.RestAssured.given;
@@ -197,7 +198,7 @@ class GatewayIntegrationIT {
 
     @Test
     void publicOpenApiDocumentsAreAvailableThroughGateway() {
-        for (String endpoint : List.of("auth", "patient", "billing", "audit")) {
+        for (String endpoint : List.of("auth", "patient", "billing", "audit", "appointment")) {
             given()
             .when()
                     .get("/openapi/" + endpoint)
@@ -409,6 +410,76 @@ class GatewayIntegrationIT {
                 .body("fieldErrors", notNullValue());
     }
 
+    @Test
+    void appointmentSchedulingConflictFilteringLifecycleAndAuditEventsWork() {
+        String token = loginAndGetToken();
+        OffsetDateTime firstTime = OffsetDateTime.now().plusDays(7).withHour(9).withMinute(0).withSecond(0).withNano(0);
+        OffsetDateTime movedTime = firstTime.plusHours(3);
+        long appointmentId = createAppointment(token, 101, 3, firstTime, "Integration consultation");
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body(appointmentBody(102, 3, firstTime.plusMinutes(15), "Overlapping visit"))
+        .when()
+                .post("/api/appointments")
+        .then()
+                .statusCode(409)
+                .body("errorCode", equalTo("APPOINTMENT_CONFLICT"));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .queryParam("date", firstTime.toLocalDate().toString())
+                .queryParam("doctorId", 3)
+                .queryParam("status", "SCHEDULED")
+        .when()
+                .get("/api/appointments")
+        .then()
+                .statusCode(200)
+                .body("id", hasItem((int) appointmentId));
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body(appointmentBody(101, 3, movedTime, "Integration consultation"))
+        .when()
+                .put("/api/appointments/" + appointmentId)
+        .then()
+                .statusCode(200)
+                .body("appointmentDateTime", notNullValue());
+
+        given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body("{\"status\":\"COMPLETED\"}")
+        .when()
+                .patch("/api/appointments/" + appointmentId + "/status")
+        .then()
+                .statusCode(200)
+                .body("status", equalTo("COMPLETED"));
+
+        long cancellationId = createAppointment(token, 102, 3, firstTime.plusDays(1), "Cancellation test");
+        given()
+                .header("Authorization", "Bearer " + token)
+        .when()
+                .delete("/api/appointments/" + cancellationId)
+        .then()
+                .statusCode(204);
+
+        given()
+                .header("Authorization", "Bearer " + token)
+        .when()
+                .get("/api/appointments/" + cancellationId)
+        .then()
+                .statusCode(200)
+                .body("status", equalTo("CANCELLED"));
+
+        waitForAuditEvents(token, List.of(
+                "AppointmentScheduled", "AppointmentRescheduled",
+                "AppointmentCompleted", "AppointmentCancelled"
+        ));
+    }
+
     private String loginAndGetToken() {
         return loginAndGetToken(ADMIN_EMAIL, ADMIN_PASSWORD);
     }
@@ -449,6 +520,48 @@ class GatewayIntegrationIT {
                 .extract()
                 .jsonPath()
                 .getLong("id");
+    }
+
+    private long createAppointment(String token, long patientId, long doctorId,
+                                   OffsetDateTime dateTime, String reason) {
+        return given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body(appointmentBody(patientId, doctorId, dateTime, reason))
+        .when()
+                .post("/api/appointments")
+        .then()
+                .statusCode(201)
+                .body("status", equalTo("SCHEDULED"))
+                .extract().jsonPath().getLong("id");
+    }
+
+    private String appointmentBody(long patientId, long doctorId,
+                                   OffsetDateTime dateTime, String reason) {
+        return """
+                {
+                  "patientId": %d,
+                  "doctorId": %d,
+                  "appointmentDateTime": "%s",
+                  "durationMinutes": 30,
+                  "reason": "%s",
+                  "notes": "Integration test"
+                }
+                """.formatted(patientId, doctorId, dateTime, reason);
+    }
+
+    private void waitForAuditEvents(String token, List<String> eventTypes) {
+        Instant deadline = Instant.now().plus(Duration.ofSeconds(45));
+        while (Instant.now().isBefore(deadline)) {
+            Response response = given().header("Authorization", "Bearer " + token)
+                    .when().get("/audit-logs");
+            if (response.statusCode() == 200) {
+                List<String> recorded = response.jsonPath().getList("eventType");
+                if (recorded.containsAll(eventTypes)) return;
+            }
+            sleep();
+        }
+        fail("Appointment events did not appear in audit history");
     }
 
     private static int getPublishedGatewayPort() {
