@@ -108,8 +108,12 @@ export function AppLayout() {
       .find((entry) =>
         location.pathname.startsWith(entry.to),
       )
-    if (location.pathname.includes('/new')) return 'New patient'
-    if (location.pathname.includes('/edit')) return 'Edit patient'
+    if (location.pathname === '/appointments/new') return 'New appointment'
+    if (location.pathname === '/appointments/my-schedule') return 'Daily schedule'
+    if (location.pathname.startsWith('/appointments/') && location.pathname.endsWith('/edit')) return 'Reschedule appointment'
+    if (location.pathname.startsWith('/appointments/')) return 'Appointment details'
+    if (location.pathname === '/patients/new') return 'New patient'
+    if (location.pathname.startsWith('/patients/') && location.pathname.endsWith('/edit')) return 'Edit patient'
     return item?.label ?? 'Patient details'
   }, [location.pathname])
 

@@ -46,6 +46,7 @@ info:
 app:
   kafka:
     patient-events-topic: ${PATIENT_EVENTS_TOPIC:patient-events}
+    appointment-events-topic: ${APPOINTMENT_EVENTS_TOPIC:appointment-events}
 
 notifications:
   email:

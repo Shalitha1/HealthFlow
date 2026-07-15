@@ -61,6 +61,8 @@ services:
         condition: service_healthy
       audit-service:
         condition: service_healthy
+      appointment-service:
+        condition: service_healthy
       auth-service:
         condition: service_healthy
     healthcheck:
@@ -86,6 +88,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_CONSUMER_GROUP_ID=audit-service
       - PATIENT_EVENTS_TOPIC=patient-events
+      - APPOINTMENT_EVENTS_TOPIC=appointment-events
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,6 +117,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_CONSUMER_GROUP_ID=notification-service
       - PATIENT_EVENTS_TOPIC=patient-events
+      - APPOINTMENT_EVENTS_TOPIC=appointment-events
       - NOTIFICATIONS_EMAIL_ENABLED=false
     depends_on:
       postgres:
@@ -211,6 +215,33 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  appointment-service:
+    build:
+      context: ./appointment-service
+      dockerfile: Dockerfile
+    container_name: appointment-service
+    expose:
+      - "8086"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=appointment_db
+      - DB_USERNAME=admin
+      - DB_PASSWORD=secret
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - APPOINTMENT_EVENTS_TOPIC=appointment-events
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8086/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 10
