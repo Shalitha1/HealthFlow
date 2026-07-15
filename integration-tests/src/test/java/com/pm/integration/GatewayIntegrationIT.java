@@ -480,6 +480,75 @@ class GatewayIntegrationIT {
         ));
     }
 
+    @Test
+    void billingPersistencePaymentCalculationAndAuditEventsWork() {
+        String token = loginAndGetToken();
+        long patientId = createPatient(token, "Billing Integration Patient", "billing.integration@example.com");
+
+        String accountId = given()
+                .header("Authorization", "Bearer " + token)
+        .when()
+                .get("/api/billing/accounts/patient/" + patientId)
+        .then()
+                .statusCode(200)
+                .body("account.patientId", equalTo(String.valueOf(patientId)))
+                .body("account.status", equalTo("ACTIVE"))
+                .extract().path("account.id");
+
+        long invoiceId = given()
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .body("""
+                        {
+                          "billingAccountId": "%s",
+                          "appointmentId": 7001,
+                          "dueDate": "%s",
+                          "status": "ISSUED",
+                          "items": [
+                            {"description": "Consultation", "quantity": 2, "unitPrice": 50.00},
+                            {"description": "Clinical supplies", "quantity": 1, "unitPrice": 25.00}
+                          ]
+                        }
+                        """.formatted(accountId, java.time.LocalDate.now().plusDays(14)))
+        .when()
+                .post("/api/billing/invoices")
+        .then()
+                .statusCode(201)
+                .body("invoiceNumber", notNullValue())
+                .body("status", equalTo("ISSUED"))
+                .body("items.size()", equalTo(2))
+                .extract().jsonPath().getLong("id");
+
+        given().header("Authorization", "Bearer " + token)
+        .when().get("/api/billing/invoices/" + invoiceId)
+        .then().statusCode(200).body("totalAmount", equalTo(125.0f)).body("balance", equalTo(125.0f));
+
+        given().header("Authorization", "Bearer " + token).contentType("application/json")
+                .body("{\"amount\":25.00,\"paymentMethod\":\"CARD\",\"reference\":\"PARTIAL-001\"}")
+        .when().post("/api/billing/invoices/" + invoiceId + "/payments")
+        .then().statusCode(201).body("status", equalTo("PARTIALLY_PAID")).body("balance", equalTo(100.0f));
+
+        given().header("Authorization", "Bearer " + token).contentType("application/json")
+                .body("{\"amount\":100.01,\"paymentMethod\":\"CASH\"}")
+        .when().post("/api/billing/invoices/" + invoiceId + "/payments")
+        .then().statusCode(409).body("errorCode", equalTo("PAYMENT_EXCEEDS_BALANCE"));
+
+        given().header("Authorization", "Bearer " + token).contentType("application/json")
+                .body("{\"amount\":100.00,\"paymentMethod\":\"BANK_TRANSFER\",\"reference\":\"FINAL-001\"}")
+        .when().post("/api/billing/invoices/" + invoiceId + "/payments")
+        .then().statusCode(201).body("status", equalTo("PAID")).body("paidAmount", equalTo(125.0f)).body("balance", equalTo(0.0f));
+
+        given().header("Authorization", "Bearer " + token).queryParam("patientId", patientId)
+        .when().get("/api/billing/invoices")
+        .then().statusCode(200).body("id", hasItem((int) invoiceId)).body("status", hasItem("PAID"));
+
+        given().header("Authorization", "Bearer " + token)
+        .when().get("/api/billing/accounts/patient/" + patientId)
+        .then().statusCode(200).body("invoices.size()", equalTo(1)).body("totalPaid", equalTo(125.0f)).body("outstandingBalance", equalTo(0.0f));
+
+        waitForAuditEvents(token, List.of("BillingAccountCreated", "InvoiceIssued", "PaymentRecorded", "InvoicePaid"));
+    }
+
     private String loginAndGetToken() {
         return loginAndGetToken(ADMIN_EMAIL, ADMIN_PASSWORD);
     }
@@ -561,7 +630,7 @@ class GatewayIntegrationIT {
             }
             sleep();
         }
-        fail("Appointment events did not appear in audit history");
+        fail("Expected events did not appear in audit history: " + eventTypes);
     }
 
     private static int getPublishedGatewayPort() {

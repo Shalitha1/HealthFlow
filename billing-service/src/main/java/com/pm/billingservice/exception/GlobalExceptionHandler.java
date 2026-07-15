@@ -2,6 +2,7 @@ package com.pm.billingservice.exception;
 
 import com.pm.billingservice.dto.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,11 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ApiError> handleApi(ApiException exception, HttpServletRequest request) {
+        return response(exception.getStatus(), exception.getErrorCode(), exception.getMessage(), request, Map.of());
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(
@@ -55,6 +61,13 @@ public class GlobalExceptionHandler {
                 request,
                 Map.of()
         );
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiError> handleConstraint(ConstraintViolationException exception, HttpServletRequest request) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        exception.getConstraintViolations().forEach(v -> fields.put(v.getPropertyPath().toString(), v.getMessage()));
+        return response(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Input validation failed", request, fields);
     }
 
     @ExceptionHandler(Exception.class)

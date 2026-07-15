@@ -9,6 +9,12 @@ import { AppointmentFormPage } from './features/appointments/AppointmentFormPage
 import { AppointmentListPage } from './features/appointments/AppointmentListPage'
 import { DoctorSchedulePage } from './features/appointments/DoctorSchedulePage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
+import { BillingDashboardPage } from './features/billing/BillingDashboardPage'
+import { InvoiceDetailsPage } from './features/billing/InvoiceDetailsPage'
+import { InvoiceFormPage } from './features/billing/InvoiceFormPage'
+import { InvoiceListPage } from './features/billing/InvoiceListPage'
+import { PatientBillingPage } from './features/billing/PatientBillingPage'
+import { PaymentPage } from './features/billing/PaymentPage'
 import { PatientDetailsPage } from './features/patients/PatientDetailsPage'
 import { PatientFormPage } from './features/patients/PatientFormPage'
 import { PatientListPage } from './features/patients/PatientListPage'
@@ -41,7 +47,12 @@ export default function App() {
             <Route path="patients" element={<PatientListPage />} />
             <Route path="patients/new" element={<PatientFormPage />} />
             <Route path="patients/:id/edit" element={<PatientFormPage />} />
-            <Route path="billing" element={<ComingSoonPage title="Billing" description="Accounts, claims, balances, and payment workflows will live here." />} />
+            <Route path="billing" element={<BillingDashboardPage />} />
+            <Route path="billing/invoices" element={<InvoiceListPage />} />
+            <Route path="billing/invoices/new" element={<InvoiceFormPage />} />
+            <Route path="billing/invoices/:id" element={<InvoiceDetailsPage />} />
+            <Route path="billing/invoices/:id/payment" element={<PaymentPage />} />
+            <Route path="billing/accounts/patient/:patientId" element={<PatientBillingPage />} />
           </Route>
 
           <Route path="patients/:id" element={<PatientDetailsPage />} />

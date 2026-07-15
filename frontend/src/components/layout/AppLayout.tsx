@@ -113,6 +113,11 @@ export function AppLayout() {
     if (location.pathname.startsWith('/appointments/') && location.pathname.endsWith('/edit')) return 'Reschedule appointment'
     if (location.pathname.startsWith('/appointments/')) return 'Appointment details'
     if (location.pathname === '/patients/new') return 'New patient'
+    if (location.pathname === '/billing/invoices/new') return 'Create invoice'
+    if (location.pathname.endsWith('/payment') && location.pathname.startsWith('/billing/invoices/')) return 'Record payment'
+    if (location.pathname.startsWith('/billing/accounts/patient/')) return 'Patient billing'
+    if (location.pathname.startsWith('/billing/invoices/')) return 'Invoice details'
+    if (location.pathname === '/billing/invoices') return 'Invoices'
     if (location.pathname.startsWith('/patients/') && location.pathname.endsWith('/edit')) return 'Edit patient'
     return item?.label ?? 'Patient details'
   }, [location.pathname])

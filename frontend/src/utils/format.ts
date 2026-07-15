@@ -28,3 +28,7 @@ export function titleCase(value: string) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
+
+export function formatCurrency(value: number | string) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value))
+}
